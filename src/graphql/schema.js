@@ -2,19 +2,29 @@ import {
   GraphQLSchema,
   GraphQLObjectType,
   GraphQLID,
+  GraphQLInt,
   GraphQLString,
   GraphQLList,
 } from 'graphql';
+
+const PersonSkillsType = new GraphQLObjectType({
+  name: 'PersonSkills',
+  fields: {
+    personId: { type: GraphQLID },
+    jump: { type: GraphQLInt },
+  },
+});
 
 const PersonType = new GraphQLObjectType({
   name: 'Person',
   fields: {
     id: { type: GraphQLID },
     name: { type: GraphQLString },
+    skills: { type: PersonSkillsType },
   },
 });
 
-const peopleData = [
+const database = [
   { id: 1, name: 'John Smith' },
   { id: 2, name: 'Sara Smith' },
   { id: 3, name: 'Budd Deey' },
@@ -25,7 +35,21 @@ const QueryType = new GraphQLObjectType({
   fields: {
     people: {
       type: new GraphQLList(PersonType),
-      resolve: () => peopleData,
+      resolve: () => database,
+    },
+    person: {
+      type: PersonType,
+      args: { 
+        id: { type: GraphQLID }
+      },
+      resolve: (
+        existing,
+        args
+      ) => {
+        const index = Number(args.id) - 1;
+
+        return database[index]
+      },
     },
   },
 });
@@ -37,14 +61,23 @@ const MutationType = new GraphQLObjectType({
       type: PersonType,
       args: { 
         name: { type: GraphQLString },
+        jump: { type: GraphQLInt },
       },
-      resolve: function (_, { name }) {
+      resolve: function (_, { name, jump }) {
+        const id = database[database.length - 1].id + 1
+
         const person = {
-          id: peopleData[peopleData.length - 1].id + 1,
+          __typename: 'Person',
+          id,
           name,
+          skills: {
+            __typename: 'PersonSkills',
+            id,
+            jump
+          }
         };
 
-        peopleData.push(person);
+        database.push(person);
         return person;
       }
     },

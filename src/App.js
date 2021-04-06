@@ -1,35 +1,66 @@
 import React, { useState } from "react";
 import { gql, useQuery, useMutation } from "@apollo/client";
+import Person from './Person';
 
 const ALL_PEOPLE = gql`
   query AllPeople {
     people {
       id
-      name
     }
   }
 `;
 
 const ADD_PERSON = gql`
-  mutation AddPerson($name: String) {
-    addPerson(name: $name) {
+  mutation AddPerson($name: String, $jump: Int) {
+    addPerson(name: $name, jump: $jump) {
       id
       name
+      skills @client {
+        id
+        jump
+      }
     }
   }
 `;
 
 export default function App() {
   const [name, setName] = useState('');
+  const [jump, setJump] = useState(1);
   const {
     loading,
     data,
   } = useQuery(ALL_PEOPLE);
 
+  /**
+   * Also doesn't add cache/normalization to any new skills entries
+   */
   const [addPerson] = useMutation(ADD_PERSON, {
-    update: (cache, { data: { addPerson: addPersonData } }) => {
+    optimisticResponse: {
+      addPerson: {
+        __typename: 'Person',
+        id: Number(data?.people[data?.people.length - 1].id) + 1,
+        name,
+        skills: {
+          __typename: 'PersonSkills',
+          personId: Number(data?.people[data?.people.length - 1].id) + 1,
+          jump
+        }
+      }
+    },
+    update: (
+      cache,
+      {
+        data: {
+          addPerson: addPersonData
+        }
+      }
+    ) => {
       const peopleResult = cache.readQuery({ query: ALL_PEOPLE });
 
+      /**
+       * Doesn't add cache/normalization to any new skills entries
+       * (Does trigger merge function in mutation field policy)
+       */
       cache.writeQuery({
         query: ALL_PEOPLE,
         data: {
@@ -41,7 +72,22 @@ export default function App() {
         },
       });
     },
+    variables: {
+      id: Number(data?.people[data?.people.length - 1].id) + 1
+    }
   });
+
+  const onClick = () => {
+    addPerson({
+      variables: {
+        name,
+        jump: jump ? Number(jump) ?? 1 : 1
+      }
+    });
+
+    setName('');
+    setJump(1);
+  }
 
   return (
     <main>
@@ -57,11 +103,14 @@ export default function App() {
           value={name}
           onChange={evt => setName(evt.target.value)}
         />
+        <input 
+          type="number" 
+          name="jump" 
+          value={jump}
+          onChange={evt => setJump(evt.target.value)}
+        />
         <button
-          onClick={() => {
-            addPerson({ variables: { name } });
-            setName('');
-          }}
+          onClick={onClick}
         >
           Add person
         </button>
@@ -72,7 +121,7 @@ export default function App() {
       ) : (
         <ul>
           {data?.people.map(person => (
-            <li key={person.id}>{person.name}</li>
+            <li key={person.id}><Person id={Number(person.id)} /></li>
           ))}
         </ul>
       )}
